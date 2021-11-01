@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      #mung {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, 300px);
+        grid-auto-rows: 300px;
+      }
+      video {
+        width: 100%;
+        object-fit: cover;
+      }
+    </style>
+    <script 
+      src="https://cdn.socket.io/4.3.2/socket.io.min.js" 
+      integrity="sha384-KAZ4DtjNhLChOB/hxXuKqhMLYvx3b5MlT55xPEiNmREKRzeEm+RVPlTnAn0ajQNs" 
+      crossorigin="anonymous"
+    ></script>
+    <script 
+      src="https://unpkg.com/peerjs@1.3.1/dist/peerjs.min.js"
+    ></script>
+    <title>멍개의 WebRTC3</title>
+  </head>
+  <body>
+    <div>
+      <span id="my-peer"></span>
+    </div>
+
+    <input type="text" id="peer-id"></input>
+    <button id="connect">Connect</button>
+    <button id="share">화면공유</button>
+
+    <div id="mung" >
+    </div>
+
+    <script>
+      const myPeerArea = document.getElementById('my-peer');
+      const videoGrid = document.getElementById('mung');
+      const peerIdInput = document.getElementById('peer-id');
+      const button = document.getElementById('connect');
+      const shareButton = document.getElementById('share');
+      let myStream;
+      let myScreenStream;
+      let conn;
+
+      const peer = new Peer({
+        host: 'localhost',
+        port: 9000,
+        path: 'myapp'
+      })
+
+      // peer 서버에게 peerId 발급
+      peer.on('open', (id) => {
+        myPeerArea.innerText = id;
+      })
+
+      // data receive
+      peer.on('connection', (conn) => {
+        console.log('connection')
+        conn.on('data', (data) => {
+          console.log(data);
+        })
+      })
+
+      // call(stream) receive
+      peer.on('call', async (call) => {
+        const stream = await getMyStream();
+        call.answer(stream);
+        console.log(stream)
+        call.on('stream', (remoteStream) => {
+          console.log(remoteStream);
+          const video = document.createElement('video');
+          addVideoStream(video, remoteStream);
+        })
+      });
+
+      async function getMyStream() {
+        if (myStream) return myStream;
+        myStream = await navigator.mediaDevices.getUserMedia({video: true,audio: false,})
+        return myStream;
+      }
+      async function getMyScreenStream() {
+        if (myScreenStream) return myScreenStream;
+        myScreenStream = await navigator.mediaDevices.getDisplayMedia({video: true,audio: false,})
+        return myScreenStream;
+      }
+
+      function addVideoStream(video, stream) {
+        video.srcObject = stream;
+        video.addEventListener('loadedmetadata', () => {
+          video.play();
+        });
+        video.setAttribute('data-peer-id', stream.id);
+        videoGrid.append(video);
+      }
+
+      button.addEventListener('click', async () => {
+        const peerIds = peerIdInput.value.split(',');
+        for(let peerId of peerIds) {
+          const stream = await getMyStream()
+          const call = peer.call(peerId, stream);
+          console.log('myStream:', stream);
+       
+          call.on('stream', (remoteStream) => {
+            console.log('remoteStream', remoteStream);
+            const video = document.createElement('video');
+            addVideoStream(video, remoteStream);
+          });
+        }
+      })
+
+      shareButton.addEventListener('click', async () => {
+        const peerIds = peerIdInput.value.split(',');
+        
+        for(let peerId of peerIds) {
+          const stream = await getMyScreenStream();
+          const call = peer.call(peerId, stream);
+          console.log('myStream:', stream);
+
+          call.on('stream', (remoteStream) => {
+            console.log('remoteStream', remoteStream);
+            const video = document.createElement('video');
+            addVideoStream(video, remoteStream);
+          });
+        }
+
+      })
+    </script>
+  </body>
+</html>
